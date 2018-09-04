@@ -1,5 +1,6 @@
 
-#define XOPEN_SOURCE_EXTENDED
+#define _XOPEN_SOURCE_EXTENDED 1
+#define NCURSES_WIDECHAR 1
 
 #include <sys/types.h>
 #include <dirent.h>
@@ -19,10 +20,10 @@
 
 enum Todo_State
 {
-    State_Not_Started,
-    State_Priority,
-    State_Doing,
-    State_Done,
+    State_Not_Started   = 0,
+    State_Priority      = 1,
+    State_Doing         = 2,
+    State_Done          = 3,
 };
 
 struct Todo_List
@@ -35,7 +36,20 @@ struct Todo_List
     wchar_t *text;
 };
 
-struct Todo_List *todo_list_load(char *file_path)
+static void todo_list_save(char *file_path, struct Todo_List *list)
+{
+    FILE *file = fopen(file_path, "w");
+
+    while (list)
+    {
+        fwprintf(file, L"%X %X %X %X %ls\n", list->time_added, list->time_started, list->time_complete, list->state, list->text);
+        list = list->next;
+    }
+
+    fclose(file);
+}
+
+static struct Todo_List *todo_list_load(char *file_path)
 {
     int fd = open(file_path, O_RDONLY);
     assert(fd != -1);
@@ -65,6 +79,8 @@ struct Todo_List *todo_list_load(char *file_path)
         long long statell = wcstoll(line, &line, 10);
 
         enum Todo_State state = (enum Todo_State)statell;
+
+        line += wcsspn(line, L" "); // reject spaces until actual text
 
         *next = calloc(1, sizeof (struct Todo_List));
         **next = 
@@ -115,6 +131,18 @@ static int todo_list_count(struct Todo_List *listing)
 
 static _Bool s_enable_unicode = false;
 
+int get_week_number(struct tm *tm)
+{
+    int prev_sunday = tm->tm_yday - tm->tm_wday;
+    int week_count = prev_sunday / 7;
+    int first_week_length = prev_sunday % 7;
+    if (first_week_length)
+    {
+        week_count += 1;
+    }
+    return week_count;
+}
+
 static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View *lview)
 {
     int draw_x = 0,
@@ -128,19 +156,54 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
     {
         wcscat(space, L" ");
     }
-    
+
+    wchar_t scratch_buffer[64];
+    struct tm week_tracker_tm = {0};
     struct Todo_List *listing = lview->listing;
     while (listing)
     {
 #define IS_SELECTED (lview->selection_index == list_index)
         if (list_index >= lview->scrolling)
         {
-            if (IS_SELECTED) wattron(window, WA_STANDOUT);
-
+            struct tm tm;
+            gmtime_r(&listing->time_added, &tm);
+            if (get_week_number(&tm) > get_week_number(&week_tracker_tm))
             {
+                week_tracker_tm = tm;
+                week_tracker_tm.tm_yday -= week_tracker_tm.tm_wday;
+                week_tracker_tm.tm_wday = 0;
+
+                size_t date_string_length = wcsftime(scratch_buffer,
+                                                     ARRAY_COUNT(scratch_buffer),
+                                                     L" %Y %m %d .. ",
+                                                     &week_tracker_tm);
+                mvwaddnwstr(window, draw_y, draw_x, scratch_buffer, date_string_length);
+                draw_x += date_string_length;
+
+
+                time_t temp_time = mktime(&week_tracker_tm);
+                temp_time += 60 * 60 * 24 * 7; // Add one week
+
+                struct tm temp_tm;
+                gmtime_r(&temp_time, &temp_tm);
+
+                date_string_length        = wcsftime(scratch_buffer,
+                                                     ARRAY_COUNT(scratch_buffer),
+                                                     L"%d",
+                                                     &temp_tm);
+                mvwaddnwstr(window, draw_y, draw_x, scratch_buffer, date_string_length);
+                draw_x += date_string_length;
+
+                draw_y += 1;
+                draw_x = 0;
                 // Clear whole line
                 mvwaddnwstr(window, draw_y, 0, space, max_x);
             }
+
+            if (IS_SELECTED) wattron(window, WA_STANDOUT);
+
+            // Clear whole line
+            mvwaddnwstr(window, draw_y, 0, space, max_x);
 
             if (IS_SELECTED)
             {
@@ -152,18 +215,18 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
             }
             draw_x += 4;
 
+            size_t day_string_length = wcsftime(scratch_buffer,
+                                                 ARRAY_COUNT(scratch_buffer),
+                                                 L"%a ",
+                                                 &tm);
+            mvwaddnwstr(window, draw_y, draw_x, scratch_buffer, day_string_length);
+            draw_x += day_string_length;
 
-            wchar_t scratch_buffer[64];
+
             switch (listing->state)
             {
                 case State_Not_Started:
                 {
-                    size_t date_string_length = wcsftime(scratch_buffer,
-                                                         ARRAY_COUNT(scratch_buffer),
-                                                         L"%y-%m %a ",
-                                                         gmtime(&listing->time_added));
-                    mvwaddwstr(window, draw_y, draw_x, scratch_buffer);
-                    draw_x += date_string_length;
                     wattron(window, COLOR_PAIR(1));
                     mvwaddnwstr(window, draw_y, draw_x, s_enable_unicode ? L"\uF00C  " : L" . ", 3);
                     wattroff(window, COLOR_PAIR(1));
@@ -171,12 +234,6 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
                 }
                 case State_Priority:
                 {
-                    size_t date_string_length = wcsftime(scratch_buffer,
-                                                         ARRAY_COUNT(scratch_buffer),
-                                                         L"%y-%m %a ",
-                                                         gmtime(&listing->time_added));
-                    mvwaddwstr(window, draw_y, draw_x, scratch_buffer);
-                    draw_x += date_string_length;
                     wattron(window, COLOR_PAIR(2));
                     mvwaddnwstr(window, draw_y, draw_x, s_enable_unicode ? L"\uF00C  " : L" ! ", 3);
                     wattroff(window, COLOR_PAIR(2));
@@ -184,12 +241,6 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
                 }
                 case State_Doing:
                 {
-                    size_t date_string_length = wcsftime(scratch_buffer,
-                                                         ARRAY_COUNT(scratch_buffer),
-                                                         L"%y-%m %a ",
-                                                         gmtime(&listing->time_added));
-                    mvwaddwstr(window, draw_y, draw_x, scratch_buffer);
-                    draw_x += date_string_length;
                     wattron(window, COLOR_PAIR(4));
                     mvwaddnwstr(window, draw_y, draw_x, s_enable_unicode ? L"\uF00C  " : L" O ", 3);
                     wattroff(window, COLOR_PAIR(4));
@@ -197,12 +248,6 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
                 }
                 case State_Done:
                 {
-                    size_t date_string_length = wcsftime(scratch_buffer,
-                                                         ARRAY_COUNT(scratch_buffer),
-                                                         L"%y-%m %a ",
-                                                         gmtime(&listing->time_added));
-                    mvwaddwstr(window, draw_y, draw_x, scratch_buffer);
-                    draw_x += date_string_length;
                     wattron(window, COLOR_PAIR(5));
                     mvwaddnwstr(window, draw_y, draw_x, s_enable_unicode ? L"\uF00C  " : L" X ", 3);
                     wattroff(window, COLOR_PAIR(5));
@@ -227,9 +272,86 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
     free (space);
 }
 
-int main(int argc, char **argv)
+static struct Todo_List *todo_list_view_get_selected(struct Todo_List_View *view)
+{
+    struct Todo_List *selected = view->listing;
+    for (int i = view->selection_index; i; --i)
+    {
+        selected = selected->next;
+    }
+    return selected;
+}
+
+int main(int argc, char *const *argv)
 {
     setlocale(LC_ALL, "");
+    
+    _Bool enter_graphical_mode = false;
+    if (argc != 1)
+    { // There's args to parse
+        int option;
+        while ((option = getopt(argc, argv, "+ugr::f::")) != -1)
+        {
+            if (option == 'u')
+            {
+                s_enable_unicode = true;
+                enter_graphical_mode = true;
+            }
+
+            if (option == 'g')
+            {
+                enter_graphical_mode = true;
+            }
+
+            if (option == 'r')
+            {
+                // TODO: report
+            }
+
+            if (option == 'f')
+            {
+                // TODO: file name
+            }
+        }
+    }
+    else
+    {
+        enter_graphical_mode = true;
+    }
+
+    struct Todo_List *global_listing = todo_list_load("todolist");
+    {
+        struct Todo_List *last = global_listing;
+        while (last->next) last = last->next;
+        struct Todo_List **next = &last->next;
+        for (int i = optind; i < argc; ++i)
+        {
+            struct timespec tp;
+            clock_gettime(CLOCK_REALTIME_COARSE, &tp);
+            time_t t = tp.tv_sec;
+
+            wchar_t *text = calloc(strlen(argv[i]) + 1, sizeof (wchar_t));
+            mbstowcs(text, argv[i], strlen(argv[i]) + 1);
+
+            *next = calloc(1, sizeof (struct Todo_List));
+            **next = 
+                (struct Todo_List)
+                {
+                    .time_added = t,
+                    .time_started = 0,
+                    .time_complete = 0,
+                    .state = State_Not_Started,
+                    .text = text,
+                };
+            next = &(*next)->next;
+        }
+    }
+
+    if (! enter_graphical_mode)
+    {
+        goto save_and_quit;
+    }
+
     initscr();   // start up ncurses
     cbreak();    // don't wait for return when getting chars
     noecho();    // don't echo keypresses
@@ -251,12 +373,11 @@ int main(int argc, char **argv)
 
     {
         struct Todo_List_View *lview = calloc(1, sizeof(*lview));
-        lview->listing = todo_list_load("todolist");
+        lview->listing = global_listing;
 
         {
-            int window_width, window_height;
+            int window_width, window_height; (void)window_width;
             wint_t ch = 0;
-            (void)window_width;
             do
             {
                 getmaxyx(stdscr, window_height, window_width);
@@ -289,44 +410,57 @@ int main(int argc, char **argv)
                 }
                 if (ch == KEY_LEFT)
                 {
-                    struct Todo_List *item = lview->listing;
-                    for (int i = lview->selection_index; i; --i)
-                    {
-                        item = item->next;
-                    }
-                    item->state = State_Not_Started;
+                    struct Todo_List *selected = todo_list_view_get_selected(lview);
+                    selected->state = State_Not_Started;
                 }
                 if (ch == KEY_RIGHT)
                 {
-                    struct Todo_List *item = lview->listing;
-                    for (int i = lview->selection_index; i; --i)
-                    {
-                        item = item->next;
-                    }
+                    struct Todo_List *item = todo_list_view_get_selected(lview);
                     switch (item->state)
                     {
                         case State_Not_Started:
                         case State_Priority:
+                        {
                             item->state = State_Doing;
+
+                            struct timespec tp;
+                            clock_gettime(CLOCK_REALTIME_COARSE, &tp);
+                            item->time_started = tp.tv_sec;
                             break;
+                        }
 
                         case State_Doing:
+                        {
                             item->state = State_Done;
+
+                            struct timespec tp;
+                            clock_gettime(CLOCK_REALTIME_COARSE, &tp);
+                            item->time_complete = tp.tv_sec;
                             break;
+                        }
 
                         case State_Done:
                             break;
                     }
                 }
+                if (ch == '!')
+                {
+                    todo_list_view_get_selected(lview)->state = State_Priority;
+                }
                 werase(stdscr);
                 wrefresh(stdscr);
                 draw_todo_list_view_to_window(stdscr, lview);
             } while (get_wch(&ch), ch != 'q');
-            todo_list_free(lview->listing);
             free(lview);
         }
     }
 
     endwin();
+
+save_and_quit:
+    {
+        todo_list_save("todolist", global_listing);
+    }
+    todo_list_free(global_listing);
     return 0;
 }
