@@ -133,7 +133,11 @@ static _Bool s_enable_unicode = false;
 
 int get_week_number(struct tm *tm)
 {
-    int prev_sunday = tm->tm_yday - tm->tm_wday;
+    struct tm local = *tm;
+    local.tm_mday -= local.tm_wday;
+    mktime(&local);
+
+    int prev_sunday = local.tm_yday;
     int week_count = prev_sunday / 7;
     int first_week_length = prev_sunday % 7;
     if (first_week_length)
@@ -160,6 +164,7 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
     wchar_t scratch_buffer[64];
     struct tm week_tracker_tm = {0};
     struct Todo_List *listing = lview->listing;
+    _Bool printed_header = false;
     while (listing)
     {
 #define IS_SELECTED (lview->selection_index == list_index)
@@ -167,32 +172,51 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
         {
             struct tm tm;
             gmtime_r(&listing->time_added, &tm);
-            if (get_week_number(&tm) > get_week_number(&week_tracker_tm))
+            if (! printed_header || get_week_number(&tm) > get_week_number(&week_tracker_tm))
             {
+                printed_header = true;
                 week_tracker_tm = tm;
-                week_tracker_tm.tm_yday -= week_tracker_tm.tm_wday;
-                week_tracker_tm.tm_wday = 0;
+                week_tracker_tm.tm_mday -= week_tracker_tm.tm_wday;
+                time_t time_at_start_of_week = mktime(&week_tracker_tm);
 
                 size_t date_string_length = wcsftime(scratch_buffer,
                                                      ARRAY_COUNT(scratch_buffer),
-                                                     L" %Y %m %d .. ",
+                                                     L" %Y %B %e",
                                                      &week_tracker_tm);
+                //swprintf(scratch_buffer, ARRAY_COUNT(scratch_buffer), L"%i     %i   ", get_week_number(&week_tracker_tm), get_week_number(&tm));
                 mvwaddnwstr(window, draw_y, draw_x, scratch_buffer, date_string_length);
                 draw_x += date_string_length;
 
+                void draw_number_suffix(int number)
+                {
+                    wchar_t *to_draw;
+                    number %= 10;
+                    switch (number)
+                    {
+                        case 1: to_draw = L"st"; break;
+                        case 2: to_draw = L"nd"; break;
+                        case 3: to_draw = L"rd"; break;
+                        case 4 ... 10:
+                        case 0: to_draw = L"th"; break;
+                    }
+                    mvwaddnwstr(window, draw_y, draw_x, to_draw, 2);
+                    draw_x += 2;
+                }
 
-                time_t temp_time = mktime(&week_tracker_tm);
-                temp_time += 60 * 60 * 24 * 7; // Add one week
+                draw_number_suffix(week_tracker_tm.tm_mday);
 
+                time_t time_at_end_of_week = time_at_start_of_week + 60 * 60 * 24 * 7;
                 struct tm temp_tm;
-                gmtime_r(&temp_time, &temp_tm);
+                gmtime_r(&time_at_end_of_week, &temp_tm);
 
                 date_string_length        = wcsftime(scratch_buffer,
                                                      ARRAY_COUNT(scratch_buffer),
-                                                     L"%d",
+                                                     L" .. %B %e",
                                                      &temp_tm);
                 mvwaddnwstr(window, draw_y, draw_x, scratch_buffer, date_string_length);
                 draw_x += date_string_length;
+
+                draw_number_suffix(temp_tm.tm_mday);
 
                 draw_y += 1;
                 draw_x = 0;
@@ -272,14 +296,131 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
     free (space);
 }
 
+static struct Todo_List *todo_list_get_at(struct Todo_List *list, int index)
+{
+    struct Todo_List *result = list;
+    for (int i = index; i; --i)
+    {
+        result = result->next;
+    }
+    return result;
+}
+
 static struct Todo_List *todo_list_view_get_selected(struct Todo_List_View *view)
 {
-    struct Todo_List *selected = view->listing;
-    for (int i = view->selection_index; i; --i)
+    return todo_list_get_at(view->listing, view->selection_index);
+}
+
+static void todo_list_merge_sort(struct Todo_List **headref)
+{
+    struct Todo_List *head = *headref;
+    if (head == NULL || head->next == NULL)
     {
-        selected = selected->next;
+        return;
     }
-    return selected;
+
+    void front_back_split(struct Todo_List *h, struct Todo_List **a_ptr, struct Todo_List **b_ptr)
+    {
+        struct Todo_List *slow = h;
+        struct Todo_List *fast = h->next;
+        while (fast)
+        {
+            fast = fast->next;
+            if (fast)
+            {
+                slow = slow->next;
+                fast = fast->next;
+            }
+        }
+        *a_ptr = h;
+        *b_ptr = slow->next;
+        slow->next = NULL;
+    }
+
+    struct Todo_List *sorted_merge(struct Todo_List *a, struct Todo_List *b)
+    {
+        _Bool compare(struct Todo_List *first, struct Todo_List *secnd)
+        {
+            if (first->state == secnd->state)
+            {
+                // identical states, compare times
+                switch(first->state)
+                {
+                    case State_Priority:
+                    case State_Doing:
+                        return first->time_started > secnd->time_started;
+                    case State_Not_Started:
+                        return first->time_added > secnd->time_added;
+                    case State_Done:
+                        return first->time_complete > secnd->time_complete;
+                }
+                return false;
+            }
+
+            if (first->state == State_Priority)
+            {
+                return true;
+            }
+            else if (secnd->state == State_Priority)
+            {
+                return false;
+            }
+
+            if (first->state == State_Doing)
+            {
+                return true;
+            }
+            else if (secnd->state == State_Doing)
+            {
+                return false;
+            }
+
+            if (first->state == State_Not_Started)
+            {
+                return true;
+            }
+            else if (secnd->state == State_Not_Started)
+            {
+                return false;
+            }
+
+            if (first->state == State_Done)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+            return true;
+        }
+
+        struct Todo_List *result = NULL;
+        if (a == NULL)
+            return b;
+        else if (b == NULL)
+            return a;
+
+        if (compare(a, b))
+        {
+            result = a;
+            result->next = sorted_merge(a->next, b);
+        }
+        else
+        {
+            result = b;
+            result->next = sorted_merge(a, b->next);
+        }
+        return result;
+    }
+
+    struct Todo_List *a, *b;
+    front_back_split(head, &a, &b);
+    
+    todo_list_merge_sort(&a);
+    todo_list_merge_sort(&b);
+
+    *headref = sorted_merge(a, b);
 }
 
 int main(int argc, char *const *argv)
@@ -321,6 +462,7 @@ int main(int argc, char *const *argv)
 
     struct Todo_List *global_listing = todo_list_load("todolist");
     {
+        // TODO: we should be pushing to front of list, not back
         struct Todo_List *last = global_listing;
         while (last->next) last = last->next;
         struct Todo_List **next = &last->next;
@@ -459,6 +601,7 @@ int main(int argc, char *const *argv)
 
 save_and_quit:
     {
+        todo_list_merge_sort(&global_listing);
         todo_list_save("todolist", global_listing);
     }
     todo_list_free(global_listing);
