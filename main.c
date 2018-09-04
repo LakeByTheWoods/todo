@@ -18,6 +18,12 @@
 
 #define ARRAY_COUNT(a) (sizeof(a)/sizeof(*a))
 
+static struct config
+{
+    _Bool enable_unicode;
+    _Bool enter_graphical_mode;
+} config;
+
 enum Todo_State
 {
     State_Not_Started   = 0,
@@ -61,7 +67,7 @@ static struct Todo_List *todo_list_load(char *file_path)
     char *file_contents = calloc(offset_end + 1, 1);
     read(fd, file_contents, offset_end);
 
-    struct Todo_List *result;
+    struct Todo_List *result = 0;
     struct Todo_List **next = &result;
 
     wchar_t *start_ptr = calloc(offset_end + 1, sizeof (wchar_t));
@@ -129,8 +135,6 @@ static int todo_list_count(struct Todo_List *listing)
     return count;
 }
 
-static _Bool s_enable_unicode = false;
-
 int get_week_number(struct tm *tm)
 {
     struct tm local = *tm;
@@ -171,7 +175,7 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
         if (list_index >= lview->scrolling)
         {
             struct tm tm;
-            gmtime_r(&listing->time_added, &tm);
+            localtime_r(&listing->time_added, &tm);
             if (! printed_header || get_week_number(&tm) > get_week_number(&week_tracker_tm))
             {
                 printed_header = true;
@@ -207,7 +211,7 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
 
                 time_t time_at_end_of_week = time_at_start_of_week + 60 * 60 * 24 * 7;
                 struct tm temp_tm;
-                gmtime_r(&time_at_end_of_week, &temp_tm);
+                localtime_r(&time_at_end_of_week, &temp_tm);
 
                 date_string_length        = wcsftime(scratch_buffer,
                                                      ARRAY_COUNT(scratch_buffer),
@@ -231,7 +235,7 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
 
             if (IS_SELECTED)
             {
-                mvwaddnwstr(window, draw_y, draw_x, s_enable_unicode ? L"\uF00C    " : L" >  ", 4);
+                mvwaddnwstr(window, draw_y, draw_x, config.enable_unicode ? L"\uF7C6    " : L" >  ", 4);
             }
             else
             {
@@ -241,7 +245,7 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
 
             size_t day_string_length = wcsftime(scratch_buffer,
                                                  ARRAY_COUNT(scratch_buffer),
-                                                 L"%a ",
+                                                 L"%Y %m %d %a ",
                                                  &tm);
             mvwaddnwstr(window, draw_y, draw_x, scratch_buffer, day_string_length);
             draw_x += day_string_length;
@@ -252,28 +256,28 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
                 case State_Not_Started:
                 {
                     wattron(window, COLOR_PAIR(1));
-                    mvwaddnwstr(window, draw_y, draw_x, s_enable_unicode ? L"\uF00C  " : L" . ", 3);
+                    mvwaddnwstr(window, draw_y, draw_x, config.enable_unicode ? L" \uF62F " : L" . ", 3);
                     wattroff(window, COLOR_PAIR(1));
                     break;
                 }
                 case State_Priority:
                 {
                     wattron(window, COLOR_PAIR(2));
-                    mvwaddnwstr(window, draw_y, draw_x, s_enable_unicode ? L"\uF00C  " : L" ! ", 3);
+                    mvwaddnwstr(window, draw_y, draw_x, config.enable_unicode ? L" \uFAD5 " : L" ! ", 3);
                     wattroff(window, COLOR_PAIR(2));
                     break;
                 }
                 case State_Doing:
                 {
                     wattron(window, COLOR_PAIR(4));
-                    mvwaddnwstr(window, draw_y, draw_x, s_enable_unicode ? L"\uF00C  " : L" O ", 3);
+                    mvwaddnwstr(window, draw_y, draw_x, config.enable_unicode ? L" \uF90B " : L" O ", 3);
                     wattroff(window, COLOR_PAIR(4));
                     break;
                 }
                 case State_Done:
                 {
                     wattron(window, COLOR_PAIR(5));
-                    mvwaddnwstr(window, draw_y, draw_x, s_enable_unicode ? L"\uF00C  " : L" X ", 3);
+                    mvwaddnwstr(window, draw_y, draw_x, config.enable_unicode ? L" \uF633 " : L" X ", 3);
                     wattroff(window, COLOR_PAIR(5));
                     break;
                 }
@@ -426,8 +430,10 @@ static void todo_list_merge_sort(struct Todo_List **headref)
 int main(int argc, char *const *argv)
 {
     setlocale(LC_ALL, "");
+    setlocale(LC_CTYPE, "");
+
+    config = (struct config){0};
     
-    _Bool enter_graphical_mode = false;
     if (argc != 1)
     { // There's args to parse
         int option;
@@ -435,13 +441,13 @@ int main(int argc, char *const *argv)
         {
             if (option == 'u')
             {
-                s_enable_unicode = true;
-                enter_graphical_mode = true;
+                config.enable_unicode = true;
+                config.enter_graphical_mode = true;
             }
 
             if (option == 'g')
             {
-                enter_graphical_mode = true;
+                config.enter_graphical_mode = true;
             }
 
             if (option == 'r')
@@ -457,26 +463,23 @@ int main(int argc, char *const *argv)
     }
     else
     {
-        enter_graphical_mode = true;
+        config.enter_graphical_mode = true;
     }
 
     struct Todo_List *global_listing = todo_list_load("todolist");
     {
         // TODO: we should be pushing to front of list, not back
-        struct Todo_List *last = global_listing;
-        while (last->next) last = last->next;
-        struct Todo_List **next = &last->next;
         for (int i = optind; i < argc; ++i)
         {
             struct timespec tp;
-            clock_gettime(CLOCK_REALTIME_COARSE, &tp);
+            clock_gettime(CLOCK_REALTIME, &tp);
             time_t t = tp.tv_sec;
 
             wchar_t *text = calloc(strlen(argv[i]) + 1, sizeof (wchar_t));
             mbstowcs(text, argv[i], strlen(argv[i]) + 1);
 
-            *next = calloc(1, sizeof (struct Todo_List));
-            **next = 
+            struct Todo_List *new = calloc(1, sizeof (struct Todo_List));
+            *new = 
                 (struct Todo_List)
                 {
                     .time_added = t,
@@ -485,11 +488,17 @@ int main(int argc, char *const *argv)
                     .state = State_Not_Started,
                     .text = text,
                 };
-            next = &(*next)->next;
+            new->next = global_listing;
+            global_listing = new;
         }
     }
 
-    if (! enter_graphical_mode)
+    if (! config.enter_graphical_mode)
+    {
+        goto save_and_quit;
+    }
+
+    if (! global_listing)
     {
         goto save_and_quit;
     }
@@ -600,6 +609,7 @@ int main(int argc, char *const *argv)
     endwin();
 
 save_and_quit:
+    if (global_listing)
     {
         todo_list_merge_sort(&global_listing);
         todo_list_save("todolist", global_listing);
