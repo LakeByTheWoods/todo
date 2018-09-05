@@ -30,6 +30,7 @@ enum Todo_State
     State_Priority      = 1,
     State_Doing         = 2,
     State_Done          = 3,
+    State_In_Review		= 4,
 };
 
 struct Todo_List
@@ -58,6 +59,7 @@ static void todo_list_save(char *file_path, struct Todo_List *list)
 static struct Todo_List *todo_list_load(char *file_path)
 {
     int fd = open(file_path, O_RDONLY);
+    if (fd == -1) perror("panic");
     assert(fd != -1);
 
     off_t offset_end = lseek(fd, 0, SEEK_END);
@@ -89,7 +91,7 @@ static struct Todo_List *todo_list_load(char *file_path)
         line += wcsspn(line, L" "); // reject spaces until actual text
 
         *next = calloc(1, sizeof (struct Todo_List));
-        **next = 
+        **next =
             (struct Todo_List)
             {
                 .time_added = time_added,
@@ -184,9 +186,9 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
                 time_t time_at_start_of_week = mktime(&week_tracker_tm);
 
                 size_t date_string_length = wcsftime(scratch_buffer,
-                                                     ARRAY_COUNT(scratch_buffer),
-                                                     L" %Y %B %e",
-                                                     &week_tracker_tm);
+                        ARRAY_COUNT(scratch_buffer),
+                        L" %Y %B %e",
+                        &week_tracker_tm);
                 //swprintf(scratch_buffer, ARRAY_COUNT(scratch_buffer), L"%i     %i   ", get_week_number(&week_tracker_tm), get_week_number(&tm));
                 mvwaddnwstr(window, draw_y, draw_x, scratch_buffer, date_string_length);
                 draw_x += date_string_length;
@@ -214,9 +216,9 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
                 localtime_r(&time_at_end_of_week, &temp_tm);
 
                 date_string_length        = wcsftime(scratch_buffer,
-                                                     ARRAY_COUNT(scratch_buffer),
-                                                     L" .. %B %e",
-                                                     &temp_tm);
+                        ARRAY_COUNT(scratch_buffer),
+                        L" .. %B %e",
+                        &temp_tm);
                 mvwaddnwstr(window, draw_y, draw_x, scratch_buffer, date_string_length);
                 draw_x += date_string_length;
 
@@ -244,9 +246,9 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
             draw_x += 4;
 
             size_t day_string_length = wcsftime(scratch_buffer,
-                                                 ARRAY_COUNT(scratch_buffer),
-                                                 L"%Y %m %d %a ",
-                                                 &tm);
+                    ARRAY_COUNT(scratch_buffer),
+                    L"%Y %m %d %a ",
+                    &tm);
             mvwaddnwstr(window, draw_y, draw_x, scratch_buffer, day_string_length);
             draw_x += day_string_length;
 
@@ -254,36 +256,43 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
             switch (listing->state)
             {
                 case State_Not_Started:
-                {
-                    wattron(window, COLOR_PAIR(1));
-                    mvwaddnwstr(window, draw_y, draw_x, config.enable_unicode ? L" \uF62F " : L" . ", 3);
-                    wattroff(window, COLOR_PAIR(1));
-                    break;
-                }
+                    {
+                        wattron(window, COLOR_PAIR(1));
+                        mvwaddnwstr(window, draw_y, draw_x, config.enable_unicode ? L" \uF62F  " : L" .  ", 4);
+                        wattroff(window, COLOR_PAIR(1));
+                        break;
+                    }
                 case State_Priority:
-                {
-                    wattron(window, COLOR_PAIR(2));
-                    mvwaddnwstr(window, draw_y, draw_x, config.enable_unicode ? L" \uFAD5 " : L" ! ", 3);
-                    wattroff(window, COLOR_PAIR(2));
-                    break;
-                }
+                    {
+                        wattron(window, COLOR_PAIR(2));
+                        mvwaddnwstr(window, draw_y, draw_x, config.enable_unicode ? L" \uFAD5  " : L" !  ", 4);
+                        wattroff(window, COLOR_PAIR(2));
+                        break;
+                    }
                 case State_Doing:
-                {
-                    wattron(window, COLOR_PAIR(4));
-                    mvwaddnwstr(window, draw_y, draw_x, config.enable_unicode ? L" \uF90B " : L" O ", 3);
-                    wattroff(window, COLOR_PAIR(4));
-                    break;
-                }
+                    {
+                        wattron(window, COLOR_PAIR(4));
+                        mvwaddnwstr(window, draw_y, draw_x, config.enable_unicode ? L" \uF90B  " : L" O  ", 4);
+                        wattroff(window, COLOR_PAIR(4));
+                        break;
+                    }
                 case State_Done:
-                {
-                    wattron(window, COLOR_PAIR(5));
-                    mvwaddnwstr(window, draw_y, draw_x, config.enable_unicode ? L" \uF633 " : L" X ", 3);
-                    wattroff(window, COLOR_PAIR(5));
-                    break;
-                }
+                    {
+                        wattron(window, COLOR_PAIR(5));
+                        mvwaddnwstr(window, draw_y, draw_x, config.enable_unicode ? L" \uF633  " : L" X  ", 4);
+                        wattroff(window, COLOR_PAIR(5));
+                        break;
+                    }
+                case State_In_Review:
+                    {
+                        wattron(window, COLOR_PAIR(3));
+                        mvwaddnwstr(window, draw_y, draw_x, config.enable_unicode ? L" \uE215  " : L" Rv ", 4);
+                        wattroff(window, COLOR_PAIR(3));
+                        break;
+                    }
             }
 
-            draw_x += 3;
+            draw_x += 4;
 
             //mvwaddwstr(window, draw_y, draw_x, L"Hello, \uF00C World!");
             mvwaddwstr(window, draw_y, draw_x, listing->text);
@@ -352,12 +361,22 @@ static void todo_list_merge_sort(struct Todo_List **headref)
                 {
                     case State_Priority:
                     case State_Doing:
+                    case State_In_Review:
                         return first->time_started > secnd->time_started;
                     case State_Not_Started:
                         return first->time_added > secnd->time_added;
                     case State_Done:
                         return first->time_complete > secnd->time_complete;
                 }
+                return false;
+            }
+
+            if (first->state == State_In_Review)
+            {
+                return true;
+            }
+            else if (secnd->state == State_In_Review)
+            {
                 return false;
             }
 
@@ -420,7 +439,7 @@ static void todo_list_merge_sort(struct Todo_List **headref)
 
     struct Todo_List *a, *b;
     front_back_split(head, &a, &b);
-    
+
     todo_list_merge_sort(&a);
     todo_list_merge_sort(&b);
 
@@ -433,7 +452,9 @@ int main(int argc, char *const *argv)
     setlocale(LC_CTYPE, "");
 
     config = (struct config){0};
-    
+
+    config.enable_unicode = true;
+
     if (argc != 1)
     { // There's args to parse
         int option;
@@ -466,7 +487,7 @@ int main(int argc, char *const *argv)
         config.enter_graphical_mode = true;
     }
 
-    struct Todo_List *global_listing = todo_list_load("todolist");
+    struct Todo_List *global_listing = todo_list_load("/Users/lachlane/todolist");
     {
         // TODO: we should be pushing to front of list, not back
         for (int i = optind; i < argc; ++i)
@@ -479,7 +500,7 @@ int main(int argc, char *const *argv)
             mbstowcs(text, argv[i], strlen(argv[i]) + 1);
 
             struct Todo_List *new = calloc(1, sizeof (struct Todo_List));
-            *new = 
+            *new =
                 (struct Todo_List)
                 {
                     .time_added = t,
@@ -512,6 +533,7 @@ int main(int argc, char *const *argv)
     start_color();
     init_pair(1, COLOR_WHITE, COLOR_BLACK);
     init_pair(2, COLOR_RED, COLOR_BLACK);
+    init_pair(3, COLOR_BLUE, COLOR_WHITE);
     init_pair(4, COLOR_CYAN, COLOR_BLACK);
     init_pair(5, COLOR_GREEN, COLOR_BLACK);
 
@@ -571,24 +593,30 @@ int main(int argc, char *const *argv)
                     {
                         case State_Not_Started:
                         case State_Priority:
-                        {
-                            item->state = State_Doing;
+                            {
+                                item->state = State_In_Review;
 
-                            struct timespec tp;
-                            clock_gettime(CLOCK_REALTIME_COARSE, &tp);
-                            item->time_started = tp.tv_sec;
-                            break;
-                        }
+                                struct timespec tp;
+                                clock_gettime(CLOCK_REALTIME, &tp);
+                                item->time_started = tp.tv_sec;
+                                break;
+                            }
 
                         case State_Doing:
-                        {
-                            item->state = State_Done;
+                            {
+                                item->state = State_In_Review;
+                                break;
+                            }
 
-                            struct timespec tp;
-                            clock_gettime(CLOCK_REALTIME_COARSE, &tp);
-                            item->time_complete = tp.tv_sec;
-                            break;
-                        }
+                        case State_In_Review:
+                            {
+                                item->state = State_Done;
+
+                                struct timespec tp;
+                                clock_gettime(CLOCK_REALTIME, &tp);
+                                item->time_complete = tp.tv_sec;
+                                break;
+                            }
 
                         case State_Done:
                             break;
@@ -596,7 +624,11 @@ int main(int argc, char *const *argv)
                 }
                 if (ch == '!')
                 {
-                    todo_list_view_get_selected(lview)->state = State_Priority;
+                    struct Todo_List *item = todo_list_view_get_selected(lview);
+                    item->state = State_Priority;
+                    struct timespec tp;
+                    clock_gettime(CLOCK_REALTIME, &tp);
+                    item->time_started = tp.tv_sec;
                 }
                 werase(stdscr);
                 wrefresh(stdscr);
@@ -612,7 +644,7 @@ save_and_quit:
     if (global_listing)
     {
         todo_list_merge_sort(&global_listing);
-        todo_list_save("todolist", global_listing);
+        todo_list_save("/Users/lachlane/todolist", global_listing);
     }
     todo_list_free(global_listing);
     return 0;
