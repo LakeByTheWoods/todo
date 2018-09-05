@@ -12,6 +12,7 @@
 #include <assert.h>
 #include <locale.h>
 #include <wchar.h>
+#include <pwd.h>
 
 /* ncurses */
 #include <ncurses.h>
@@ -22,6 +23,7 @@ static struct config
 {
     _Bool enable_unicode;
     _Bool enter_graphical_mode;
+    char *listfile;
 } config;
 
 enum Todo_State
@@ -59,7 +61,11 @@ static void todo_list_save(char *file_path, struct Todo_List *list)
 static struct Todo_List *todo_list_load(char *file_path)
 {
     int fd = open(file_path, O_RDONLY);
-    if (fd == -1) perror("panic");
+    if (fd == -1)
+    {
+        perror("panic");
+        fprintf(stderr, "Could not open file %s\n", file_path);
+    }
     assert(fd != -1);
 
     off_t offset_end = lseek(fd, 0, SEEK_END);
@@ -122,6 +128,7 @@ static void todo_list_free(struct Todo_List *listing)
     {
         struct Todo_List *to_free = listing;
         listing = listing->next;
+        free(to_free->text);
         free(to_free);
     }
 }
@@ -180,7 +187,11 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
             localtime_r(&listing->time_added, &tm);
             if (! printed_header || get_week_number(&tm) > get_week_number(&week_tracker_tm))
             {
-                printed_header = true;
+                if (! printed_header)
+                {
+                    printed_header = true;
+                    goto skip_date;
+                }
                 week_tracker_tm = tm;
                 week_tracker_tm.tm_mday -= week_tracker_tm.tm_wday;
                 time_t time_at_start_of_week = mktime(&week_tracker_tm);
@@ -229,6 +240,7 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
                 // Clear whole line
                 mvwaddnwstr(window, draw_y, 0, space, max_x);
             }
+            skip_date:
 
             if (IS_SELECTED) wattron(window, WA_STANDOUT);
 
@@ -446,12 +458,81 @@ static void todo_list_merge_sort(struct Todo_List **headref)
     *headref = sorted_merge(a, b);
 }
 
+static char *get_home()
+{
+    char *home = getenv("HOME");
+    if (! home)
+    {
+        struct passwd *pw = getpwuid(getuid());
+        home = pw->pw_dir;
+    }
+    char *result = calloc(strlen(home) + 2, 1);;
+    sprintf(result, "%s/", home);
+    return result;
+}
+
 int main(int argc, char *const *argv)
 {
     setlocale(LC_ALL, "");
     setlocale(LC_CTYPE, "");
 
-    config = (struct config){0};
+    char *homedir = get_home();
+    char *default_listfile = "todolist";
+    config = (struct config){
+        .listfile = strcat(strcpy(calloc(strlen(homedir) + strlen(default_listfile) + 1, 1), homedir), default_listfile),
+    };
+
+    {
+        char *config_filename = ".config/todo.config";
+        char *config_dir = strcat(strcpy(calloc(strlen(homedir) + strlen(config_filename) + 1, 1), homedir), config_filename);
+        FILE *config_file = fopen(config_dir, "r");
+        if (!config_file) printf("no config %s\n", config_dir);
+        free(config_dir);
+        if (config_file)
+        {
+            printf("Yes config\n");
+            char *key = NULL, *value = NULL;
+            int count;
+            more_config:
+            count = fscanf(config_file, "%ms %ms\n", &key, &value);
+            printf("%i\n", count);
+            if (count > 0)
+            {
+                if (strcmp(key, "unicode") == 0)
+                {
+                    if (strcmp(value, "true") == 0)
+                    {
+                        config.enable_unicode = true;
+                    }
+                    else if (strcmp(value, "false") == 0)
+                    {
+                        config.enable_unicode = false;
+                    }
+                    else
+                    {
+                        fprintf(stderr, "Unkown value for 'unicode' in config %s\n", value);
+                        exit(EXIT_FAILURE);
+                    }
+                }
+                else if (strcmp(key, "listfile") == 0)
+                {
+                    free(config.listfile);
+                    config.listfile = strdup(value);
+                }
+                else
+                {
+                    fprintf(stderr, "Unkown key in config %s\n", key);
+                    exit(EXIT_FAILURE);
+                }
+            }
+            free(key); key = NULL;
+            free(value); value = NULL;
+
+            if (count > 0) goto more_config;
+            
+            fclose(config_file);
+        }
+    }
 
     config.enable_unicode = true;
 
@@ -487,7 +568,7 @@ int main(int argc, char *const *argv)
         config.enter_graphical_mode = true;
     }
 
-    struct Todo_List *global_listing = todo_list_load("/Users/lachlane/todolist");
+    struct Todo_List *global_listing = todo_list_load(config.listfile);
     {
         // TODO: we should be pushing to front of list, not back
         for (int i = optind; i < argc; ++i)
@@ -644,8 +725,9 @@ save_and_quit:
     if (global_listing)
     {
         todo_list_merge_sort(&global_listing);
-        todo_list_save("/Users/lachlane/todolist", global_listing);
+        todo_list_save(config.listfile, global_listing);
     }
+    free(config.listfile);
     todo_list_free(global_listing);
     return 0;
 }

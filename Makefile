@@ -1,9 +1,10 @@
 
+linux:
+	gcc --std=gnu11 -Wall -Werror -fno-wrapv -fno-strict-aliasing -g -I/usr/local/Cellar/ncurses/6.1/include -D_GNU_SOURCE -o todo main.c -L/usr/local/Cellar/ncurses/6.1/lib/ -lncursesw
+
 mac:
 	/usr/local/Cellar/gcc/8.2.0/bin/gcc-8 --std=gnu17 -Wall -Werror -fno-wrapv -fno-strict-aliasing -g -D_GNU_SOURCE -I/usr/local/Cellar/ncurses/6.1/include/ -o todo main.c -L/usr/local/Cellar/ncurses/6.1/lib/ -lncursesw
 
-linux:
-	gcc --std=gnu11 -Wall -Werror -fno-wrapv -fno-strict-aliasing -g -I/usr/local/Cellar/ncurses/6.1/include -D_GNU_SOURCE -o todo main.c -L/usr/local/Cellar/ncurses/6.1/lib/ -lncursesw
 
 dont:
 	To use the bundled libc++ please add the following LDFLAGS:
