@@ -594,7 +594,7 @@ int main(int argc, char *const *argv)
                         case State_Not_Started:
                         case State_Priority:
                             {
-                                item->state = State_In_Review;
+                                item->state = State_Doing;
 
                                 struct timespec tp;
                                 clock_gettime(CLOCK_REALTIME, &tp);
