@@ -462,6 +462,7 @@ static void todo_list_merge_sort(struct Todo_List **headref)
 
 const char *__asan_default_options()
 {
+    return "";
 	return
 	//"quarantine_size"
 		//Deprecated, please use quarantine_size_mb.
@@ -734,12 +735,10 @@ int main(int argc, char *const *argv)
         free(config_dir);
         if (config_file)
         {
-            printf("Yes config\n");
             char *key = NULL, *value = NULL;
             int count;
             more_config:
             count = fscanf(config_file, "%ms %ms\n", &key, &value);
-            printf("%i\n", count);
             if (count > 0)
             {
                 if (strcmp(key, "unicode") == 0)
