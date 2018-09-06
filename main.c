@@ -778,8 +778,6 @@ int main(int argc, char *const *argv)
         }
     }
 
-    config.enable_unicode = true;
-
     if (argc != 1)
     { // There's args to parse
         int option;
