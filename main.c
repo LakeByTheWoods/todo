@@ -511,7 +511,7 @@ const char *__asan_default_options()
 		//If set, explicitly unmaps the (huge) shadow at exit.
 	//"protect_shadow_gap"
 		//If set, mprotect the shadow gap
-	//"print_stats"
+	"print_stats=1:"
 		//Print various statistics after printing an error message or if atexit=1.
 	//"print_legend"
 		//Print the legend for the shadow bytes.
@@ -521,21 +521,21 @@ const char *__asan_default_options()
 		//If set, prints ASan exit stats even after program terminates successfully.
 	//"print_full_thread_history"
 		//If set, prints thread creation stacks for the threads involved in the report and their ancestors up to the main thread.
-	//"poison_heap"
+	"poison_heap=1:"
 		//Poison (or not) the heap memory on [de]allocation. Zero value is useful for benchmarking the allocator or instrumentator.
 	//"poison_partial"
 		//If true, poison partially addressable 8-byte aligned words (default=true). This flag affects heap and global buffers, but not stack buffers.
-	//"poison_array_cookie"
+	"poison_array_cookie=1:"
 		//Poison (or not) the array cookie after operator new[].
 	//"alloc_dealloc_mismatch"
 		//Report errors on malloc/delete, new/free, new/delete[], etc.
 	//"new_delete_type_mismatch"
 		//Report errors on mismatch between size of new and delete.
-	//"strict_init_order"
+	"strict_init_order=1:"
 		//If true, assume that dynamic initializers can never access globals from other modules, even if the latter are already initialized.
 	//"start_deactivated"
 		//If true, ASan tweaks a bunch of other flags (quarantine, redzone, heap poisoning) to reduce memory consumption as much as possible, and restores them to original values when the first instrumented module is loaded into the process. This is mainly intended to be used on Android.
-	//"detect_invalid_pointer_pairs"
+	"detect_invalid_pointer_pairs=2:"
 		//If >= 2, detect operations like <, <=, >, >= and - on invalid pointer pairs (e.g. when pointers belong to different objects); If == 1, detect invalid operations only when both pointers are non-null.
 	//"detect_container_overflow"
 		//If true, honor the container overflow annotations. See https://github.com/google/sanitizers/wiki/AddressSanitizerContainerOverflow
@@ -607,7 +607,7 @@ const char *__asan_default_options()
 		//If set, deadlock detection is enabled.
 	//"clear_shadow_mmap_threshold"
 		//Large shadow regions are zero-filled using mmap(NORESERVE) instead of memset(). This is the threshold size in bytes.
-	"color=always"
+	"color=always:"
 		//Colorize reports: (always|never|auto).
 	//"legacy_pthread_cond"
 		//Enables support for dynamic libraries linked with libpthread 2.2.5.
@@ -649,33 +649,33 @@ const char *__asan_default_options()
 		//Format string used to render stack frames. See sanitizer_stacktrace_printer.h for the format description. Use DEFAULT to get default format.
 	//"no_huge_pages_for_shadow"
 		//If true, the shadow is not allowed to use huge pages.
-	//"strict_string_checks"
+	"strict_string_checks=1:"
 		//If set check that string arguments are properly null-terminated
-	//"intercept_strstr"
+	"intercept_strstr=1:"
 		//If set, uses custom wrappers for strstr and strcasestr functions to find more errors.
-	//"intercept_strspn"
+	"intercept_strspn=1:"
 		//If set, uses custom wrappers for strspn and strcspn function to find more errors.
-	//"intercept_strtok"
+	"intercept_strtok=1:"
 		//If set, uses a custom wrapper for the strtok function to find more errors.
-	//"intercept_strpbrk"
+	"intercept_strpbrk=1:"
 		//If set, uses custom wrappers for strpbrk function to find more errors.
-	//"intercept_strlen"
+	"intercept_strlen=1:"
 		//If set, uses custom wrappers for strlen and strnlen functions to find more errors.
-	//"intercept_strndup"
+	"intercept_strndup=1:"
 		//If set, uses custom wrappers for strndup functions to find more errors.
-	//"intercept_strchr"
+	"intercept_strchr=1:"
 		//If set, uses custom wrappers for strchr, strchrnul, and strrchr functions to find more errors.
-	//"intercept_memcmp"
+	"intercept_memcmp=1:"
 		//If set, uses custom wrappers for memcmp function to find more errors.
-	//"strict_memcmp"
+	"strict_memcmp=1:"
 		//If true, assume that memcmp(p1, p2, n) always reads n bytes before comparing p1 and p2.
-	//"intercept_memmem"
+	"intercept_memmem=1:"
 		//If set, uses a wrapper for memmem() to find more errors.
-	//"intercept_intrin"
+	"intercept_intrin=1:"
 		//If set, uses custom wrappers for memset/memcpy/memmove intrinsics to find more errors.
-	//"intercept_stat"
+	"intercept_stat=1:"
 		//If set, uses custom wrappers for *stat functions to find more errors.
-	//"intercept_send"
+	"intercept_send=1"
 		//If set, uses custom wrappers for send* functions to find more errors.
 	//"decorate_proc_maps"
 		//If set, decorate sanitizer mappings in /proc/self/maps with user-readable names
