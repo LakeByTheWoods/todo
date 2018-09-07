@@ -63,7 +63,7 @@ static void todo_list_save(char *file_path, struct Todo_List *list)
     }
 
     fclose(file);
-}
+} /* todo_list_save */
 
 static struct Todo_List *todo_list_load(char *file_path)
 {
@@ -132,13 +132,6 @@ static struct Todo_List *todo_list_load(char *file_path)
     return result;
 } /* todo_list_load */
 
-struct Todo_List_View
-{
-    struct Todo_List *listing;
-    int               selection_index;
-    int               scrolling;
-};
-
 static void todo_list_free(struct Todo_List *listing)
 {
     while (listing)
@@ -177,7 +170,7 @@ int get_week_number(struct tm *tm)
     return week_count;
 }
 
-static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View *lview)
+static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List *listing, int selection_index, int scrolling)
 {
     int draw_x = 0,
         draw_y = 0,
@@ -194,17 +187,16 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List_View 
         wcscat(space, L" ");
     }
 
-    wchar_t           scratch_buffer[64];
-    struct tm         week_tracker_tm =
+    wchar_t   scratch_buffer[64];
+    struct tm week_tracker_tm =
     {
         0
     };
-    struct Todo_List *listing        = lview->listing;
-    _Bool             printed_header = false;
+    _Bool     printed_header = false;
     while (listing)
     {
-#define IS_SELECTED (lview->selection_index == list_index)
-        if (list_index >= lview->scrolling)
+#define IS_SELECTED (selection_index == list_index)
+        if (list_index >= scrolling)
         {
             struct tm tm;
             localtime_r(&listing->time_added, &tm);
@@ -347,7 +339,7 @@ skip_date:
             draw_x += 4;
 
             mvwaddwstr(window, draw_y, draw_x, listing->text);
-            if (lview->selection_index == list_index)
+            if (selection_index == list_index)
                 wattroff(window, WA_STANDOUT);
             ++draw_y;
             draw_x = 0;
@@ -370,11 +362,6 @@ static struct Todo_List *todo_list_get_at(struct Todo_List *list, int index)
         result = result->next;
     }
     return result;
-}
-
-static struct Todo_List *todo_list_view_get_selected(struct Todo_List_View *view)
-{
-    return todo_list_get_at(view->listing, view->selection_index);
 }
 
 static void todo_list_merge_sort(struct Todo_List **headref)
@@ -764,24 +751,30 @@ int main(int argc, char *const *argv)
                                        config_filename);
         FILE *config_file     = fopen(config_dir, "r");
         if (! config_file)
-            printf("no config %s\n", config_dir);
+            printf("no config file %s\n", config_dir);
+        else
+            printf("yes config\n");
         free(config_dir);
         if (config_file)
         {
-            char *key = NULL, *value = NULL;
-            int   count;
+            char key[101];
+            char value[101];
+            int  count;
 more_config:
-            count = fscanf(config_file, "%ms %ms\n", &key, &value);
-            if (count > 0)
+            count = fscanf(config_file, "%100s %100s\n", key, value);
+            printf("CONFIG: %s = %s\n", key, value);
+            if (count == 2)
             {
                 if (strcmp(key, "unicode") == 0)
                 {
                     if (strcmp(value, "true") == 0)
                     {
+                        printf("ENABLING UNICODE\n");
                         config.enable_unicode = true;
                     }
                     else if (strcmp(value, "false") == 0)
                     {
+                        printf("DISS UNICODE\n");
                         config.enable_unicode = false;
                     }
                     else
@@ -794,17 +787,14 @@ more_config:
                 {
                     free(config.listfile);
                     config.listfile = strdup(value);
+                    printf("Listfile is %s\n", value);
                 }
                 else
                 {
-                    fprintf(stderr, "Unkown key in config %s\n", key);
+                    fprintf(stderr, "Unkown key in config '%s' = '%s'\n", key, value);
                     exit(EXIT_FAILURE);
                 }
             }
-            free(key);
-            key   = NULL;
-            free(value);
-            value = NULL;
 
             if (count > 0)
                 goto more_config;
@@ -898,43 +888,41 @@ more_config:
     wtimeout(stdscr, 100);
 
     {
-        struct Todo_List_View *lview = calloc(1, sizeof (*lview));
-        lview->listing = global_listing;
-
         {
             int    window_width, window_height;
             (void)window_width;
+            int    selection_index = 0, scrolling = 0;
             wint_t ch = 0;
             do
             {
                 getmaxyx(stdscr, window_height, window_width);
                 if (ch == KEY_UP)
                 {
-                    --lview->selection_index;
-                    if (lview->selection_index < lview->scrolling)
+                    --selection_index;
+                    if (selection_index < scrolling)
                     {
-                        if (lview->scrolling == 0)
-                            lview->selection_index = 0;
+                        if (scrolling == 0)
+                            selection_index = 0;
                         else
-                            --lview->scrolling;
+                            --scrolling;
                     }
                 }
                 if (ch == KEY_DOWN)
                 {
-                    ++lview->selection_index;
-                    if (lview->selection_index >= todo_list_count(lview->listing))
-                        lview->selection_index = todo_list_count(lview->listing) - 1;
-                    if (lview->selection_index - lview->scrolling >= window_height)
-                        ++lview->scrolling;
+                    ++selection_index;
+                    if (selection_index >= todo_list_count(global_listing))
+                        selection_index = todo_list_count(global_listing) - 1;
+                    if (selection_index - scrolling >= window_height)
+                        ++scrolling;
                 }
                 if (ch == KEY_LEFT)
                 {
-                    struct Todo_List *selected = todo_list_view_get_selected(lview);
+                    struct Todo_List *selected = todo_list_get_at(global_listing, selection_index);
                     selected->state = State_Not_Started;
                 }
                 if (ch == KEY_RIGHT)
                 {
-                    struct Todo_List *item = todo_list_view_get_selected(lview);
+                    struct Todo_List *item = todo_list_get_at(global_listing, selection_index);
                     switch (item->state)
                     {
                     case State_Not_Started:
@@ -974,9 +962,14 @@ more_config:
                     }
                     } /* switch */
                 }
+                if (ch == 'd')
+                {
+                    struct Todo_List *item = todo_list_get_at(global_listing, selection_index);
+                    item->state = State_Discarded;
+                }
                 if (ch == '!')
                 {
-                    struct Todo_List *item = todo_list_view_get_selected(lview);
+                    struct Todo_List *item = todo_list_get_at(global_listing, selection_index);
                     item->state = State_Priority;
                     struct timespec   tp;
                     clock_gettime(CLOCK_REALTIME, &tp);
@@ -984,9 +977,8 @@ more_config:
                 }
                 werase(stdscr);
                 wrefresh(stdscr);
-                draw_todo_list_view_to_window(stdscr, lview);
+                draw_todo_list_view_to_window(stdscr, global_listing, selection_index, scrolling);
             } while (get_wch(&ch), ch != 'q');
-            free(lview);
         }
     }
 

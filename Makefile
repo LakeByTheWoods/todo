@@ -3,7 +3,7 @@ linux:
 	gcc                                   --std=gnu17 -Wall -Werror -fno-wrapv -fno-strict-aliasing -fsanitize=address -fsanitize=leak -fsanitize=undefined -fno-omit-frame-pointer -g -D_GNU_SOURCE -I/usr/local/Cellar/ncurses/6.1/include/ -o todo main.c -L/usr/local/Cellar/ncurses/6.1/lib/ -lncursesw
 
 mac:
-	/usr/local/Cellar/gcc/8.2.0/bin/gcc-8 --std=gnu17 -Wall -Werror -fno-wrapv -fno-strict-aliasing -fsanitize=address -fsanitize=leak -fsanitize=undefined -fno-omit-frame-pointer -g -D_GNU_SOURCE -I/usr/local/Cellar/ncurses/6.1/include/ -o todo main.c -L/usr/local/Cellar/ncurses/6.1/lib/ -lncursesw
+	/usr/local/Cellar/gcc/8.2.0/bin/gcc-8 --std=gnu17 -Wall -Werror -fno-wrapv -fno-strict-aliasing -fsanitize=address -fsanitize=leak -fsanitize=undefined -fno-omit-frame-pointer -g -D_GNU_SOURCE -I/usr/local/Cellar/ncurses/6.1/include/ -o todo main.c -L/usr/local/Cellar/gcc/8.2.0/lib/ -L/usr/local/Cellar/ncurses/6.1/lib/ -lncursesw
 
 
 dont:
