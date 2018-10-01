@@ -117,9 +117,7 @@ static struct Todo_List *todo_list_load(char *file_path)
         line  += wcsspn(line, L" "); // reject spaces until actual text
 
         *next  = calloc(1, sizeof (struct Todo_List));
-        **next =
-            (struct Todo_List)
-        {
+        **next = (struct Todo_List) {
             .time_added    = time_added,
             .time_started  = time_started,
             .time_complete = time_complete,
@@ -193,15 +191,32 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List *list
         0
     };
     _Bool     printed_header = false;
+	enum Todo_State prev_state = State_Not_Started;
     while (listing)
     {
 #define IS_SELECTED (selection_index == list_index)
         if (list_index >= scrolling)
         {
             struct tm tm;
-            localtime_r(&listing->time_added, &tm);
-            if (! printed_header || get_week_number(&tm) > get_week_number(&week_tracker_tm))
+			switch (listing->state)
+			{
+			case State_Discarded:
+			case State_Priority:
+			case State_Doing:
+			case State_In_Review:
+				localtime_r(&listing->time_started, &tm);
+                break;
+            case State_Not_Started:
+				localtime_r(&listing->time_added, &tm);
+                break;
+
+            case State_Done:
+				localtime_r(&listing->time_complete, &tm);
+                break;
+			}
+            if (! printed_header || get_week_number(&tm) < get_week_number(&week_tracker_tm) || prev_state != listing->state)
             {
+				prev_state = listing->state;
                 week_tracker_tm          = tm;
                 week_tracker_tm.tm_mday -= week_tracker_tm.tm_wday;
                 time_t time_at_start_of_week = mktime(&week_tracker_tm);
@@ -885,7 +900,7 @@ more_config:
     idlok(stdscr, true);
     leaveok(stdscr, true);
     scrollok(stdscr, true); // enable window scrolling
-    wtimeout(stdscr, 100);
+    wtimeout(stdscr, -1);
 
     {
         {
