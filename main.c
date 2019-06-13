@@ -168,10 +168,12 @@ int get_week_number(struct tm *tm)
     return week_count;
 }
 
-static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List *listing, int selection_index, int scrolling)
+static int dateline_count = 0;
+
+static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List *listing, int selection_index, int scrolling, int window_height)
 {
     int draw_x = 0,
-        draw_y = 0,
+        draw_y = 1,
         list_index = 0;
 
     int max_x, max_y;
@@ -190,12 +192,13 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List *list
     {
         0
     };
+	dateline_count = 0;
     _Bool     printed_header = false;
 	enum Todo_State prev_state = State_Not_Started;
     while (listing)
     {
 #define IS_SELECTED (selection_index == list_index)
-        if (list_index >= scrolling)
+        if (list_index >= scrolling && list_index - scrolling < window_height - 1)
         {
             struct tm tm;
 			switch (listing->state)
@@ -214,7 +217,7 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List *list
 				localtime_r(&listing->time_complete, &tm);
                 break;
 			}
-            if (! printed_header || get_week_number(&tm) < get_week_number(&week_tracker_tm) || prev_state != listing->state)
+            if (! printed_header || (get_week_number(&tm) < get_week_number(&week_tracker_tm)) || (tm.tm_year < week_tracker_tm.tm_year) || prev_state != listing->state)
             {
 				prev_state = listing->state;
                 week_tracker_tm          = tm;
@@ -225,6 +228,7 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List *list
                     printed_header = true;
                     goto skip_date;
                 }
+				dateline_count += 1;
 
                 size_t date_string_length = wcsftime(scratch_buffer,
                                                      ARRAY_COUNT(scratch_buffer),
@@ -275,8 +279,6 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List *list
 
                 draw_y += 1;
                 draw_x  = 0;
-                // Clear whole line
-                mvwaddnwstr(window, draw_y, 0, space, max_x);
             }
 skip_date:
 
@@ -360,7 +362,6 @@ skip_date:
             draw_x = 0;
         }
 #undef IS_SELECTED
-#undef SHRINK_ON_SELECTION
         listing = listing->next;
         ++list_index;
     }
@@ -927,7 +928,7 @@ more_config:
                     ++selection_index;
                     if (selection_index >= todo_list_count(global_listing))
                         selection_index = todo_list_count(global_listing) - 1;
-                    if (selection_index - scrolling >= window_height)
+                    if (selection_index - scrolling >= window_height - dateline_count - 1)
                         ++scrolling;
                 }
                 if (ch == KEY_LEFT)
@@ -992,7 +993,7 @@ more_config:
                 }
                 werase(stdscr);
                 wrefresh(stdscr);
-                draw_todo_list_view_to_window(stdscr, global_listing, selection_index, scrolling);
+                draw_todo_list_view_to_window(stdscr, global_listing, selection_index, scrolling, window_height);
             } while (get_wch(&ch), ch != 'q');
         }
     }
