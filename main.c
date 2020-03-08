@@ -18,13 +18,14 @@
 #include <ncurses.h>
 
 #define ARRAY_COUNT(a) (sizeof (a) / sizeof (*a))
+#define CLEAN(F) __attribute__((cleanup(F)))
 
-static struct config
+struct Config
 {
     _Bool enable_unicode;
     _Bool enter_graphical_mode;
     char *listfile;
-} config;
+};
 
 enum Todo_State
 {
@@ -76,7 +77,7 @@ static struct Todo_List *todo_list_load(char *file_path)
         free(*p);
     }
 
-    int fd __attribute__((cleanup(defer_close))) = open(file_path, O_RDONLY);
+    int fd CLEAN(defer_close) = open(file_path, O_RDONLY);
     if (fd == -1)
     {
         perror("panic");
@@ -94,7 +95,7 @@ static struct Todo_List *todo_list_load(char *file_path)
     struct Todo_List  *result = 0;
     struct Todo_List **next   = &result;
 
-    wchar_t           *wide_file_contents __attribute__((cleanup(defer_free))) =
+    wchar_t           *wide_file_contents CLEAN(defer_free) =
         calloc(offset_end + 1, sizeof (wchar_t));
     wchar_t           *start_ptr = wide_file_contents;
     swprintf(start_ptr, offset_end + 1, L"%s", file_contents);
@@ -153,7 +154,7 @@ static int todo_list_count(struct Todo_List *listing)
     return count;
 }
 
-int get_week_number(struct tm *tm)
+static int get_week_number(struct tm *tm)
 {
     struct tm local = *tm;
 
@@ -195,7 +196,7 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List *list
 	dateline_count = 0;
     _Bool     printed_header = false;
 	enum Todo_State prev_state = State_Not_Started;
-    while (listing)
+    while (listing && draw_y < window_height)
     {
 #define IS_SELECTED (selection_index == list_index)
         if (list_index >= scrolling && list_index - scrolling < window_height - 1)
@@ -246,12 +247,18 @@ static void draw_todo_list_view_to_window(WINDOW *window, struct Todo_List *list
                     switch (number)
                     {
                     case 1: to_draw = L"st";
+						if (number % 11 == 0)
+							to_draw = L"th";
                         break;
 
                     case 2: to_draw = L"nd";
+						if (number % 12 == 0)
+							to_draw = L"th";
                         break;
 
                     case 3: to_draw = L"rd";
+						if (number % 13 == 0)
+							to_draw = L"th";
                         break;
 
                     case 4 ... 10:
@@ -355,6 +362,13 @@ skip_date:
 
             draw_x += 4;
 
+			/*
+			char bbb[128];
+			sprintf(bbb, "%i", draw_y);
+			wchar_t bbbb[128];
+			for (int h = 0; h < 128; ++h) bbbb[h] = bbb[h];
+            mvwaddwstr(window, draw_y, draw_x, bbbb);
+			*/
             mvwaddwstr(window, draw_y, draw_x, listing->text);
             if (selection_index == list_index)
                 wattroff(window, WA_STANDOUT);
@@ -733,6 +747,28 @@ const char *__asan_default_options()
     ;
 } /* __asan_default_options */
 
+#define alloc_sprintf(fmt, ...)\
+({\
+	char *result;\
+	asprintf(&result, fmt, __VA_ARGS__);\
+	result;\
+})
+
+char *get_home_dir()
+{
+	char *homedir = getenv("HOME");
+	if (! homedir)
+	{
+		struct passwd *pw = getpwuid(getuid());
+		homedir = pw->pw_dir;
+	}
+	char *result = calloc(strlen(homedir) + 2, 1);
+	sprintf(result, "%s/", homedir);
+	result;
+
+	return alloc_sprintf("%s/", homedir);
+}
+
 int main(int argc, char *const *argv)
 {
     void defer_free_char(char **p)
@@ -742,40 +778,27 @@ int main(int argc, char *const *argv)
     setlocale(LC_ALL,   "");
     setlocale(LC_CTYPE, "");
 
-    char *homedir __attribute__((cleanup(defer_free_char))) =
-        ({
-        homedir = getenv("HOME");
-        if (! homedir)
-        {
-            struct passwd *pw = getpwuid(getuid());
-            homedir = pw->pw_dir;
-        }
-        char *result = calloc(strlen(homedir) + 2, 1);
-        sprintf(result, "%s/", homedir);
-        result;
-    });
-
+    char *homedir CLEAN(defer_free_char) = get_home_dir();
     char *default_listfile = "todolist";
-    config = (struct config){
-        .listfile =
-            strcat(strcpy(calloc(strlen(homedir) + strlen(default_listfile) + 1, 1), homedir), default_listfile),
+    config = (struct Config){
+        .listfile = alloc_sprintf("%s%s", homedir, default_listfile)
     };
 
     {
         char *config_filename = ".config/todo.config";
-        char *config_dir      = strcat(strcpy(calloc(strlen(homedir) + strlen(config_filename) + 1, 1), homedir),
-                                       config_filename);
+        char *config_dir = alloc_sprintf("%s%s", homedir, config_filename);
+		if (! config_dir)
+			return;
         FILE *config_file     = fopen(config_dir, "r");
         if (! config_file)
             printf("no config file %s\n", config_dir);
-        else
-            printf("yes config\n");
         free(config_dir);
         if (config_file)
         {
             char key[101];
             char value[101];
             int  count;
+            printf("loaded config file %s\n", config_dir);
 more_config:
             count = fscanf(config_file, "%100s %100s\n", key, value);
             printf("CONFIG: %s = %s\n", key, value);
@@ -925,9 +948,10 @@ more_config:
                 }
                 if (ch == KEY_DOWN)
                 {
+					int list_count = todo_list_count(global_listing);
                     ++selection_index;
-                    if (selection_index >= todo_list_count(global_listing))
-                        selection_index = todo_list_count(global_listing) - 1;
+                    if (selection_index >= list_count)
+                        selection_index = list_count - 1;
                     if (selection_index - scrolling >= window_height - dateline_count - 1)
                         ++scrolling;
                 }
@@ -992,8 +1016,8 @@ more_config:
                     item->time_started = tp.tv_sec;
                 }
                 werase(stdscr);
-                wrefresh(stdscr);
                 draw_todo_list_view_to_window(stdscr, global_listing, selection_index, scrolling, window_height);
+                wrefresh(stdscr);
             } while (get_wch(&ch), ch != 'q');
         }
     }
