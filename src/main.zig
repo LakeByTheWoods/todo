@@ -21,7 +21,7 @@ fn getHomeDir() [*c]u8 {
 }
 
 const Config = struct {
-    enable_unicode: bool = false,
+    enable_unicode: bool = true,
     enter_graphical_mode: bool = true,
     listfile: [*c]u8 = null,
 };
@@ -101,7 +101,7 @@ pub fn main() anyerror!void {
     var global_listing = try todo.loadList(allocator, config.listfile);
     defer global_listing.deinit();
     const count = global_listing.items.len;
-    std.debug.warn("COUNT = {}\n", .{count});
+    warn("COUNT = {}\n", .{count});
 
     const args = try std.process.argsAlloc(std.heap.page_allocator);
     defer std.process.argsFree(std.heap.page_allocator, args);
@@ -131,7 +131,7 @@ pub fn main() anyerror!void {
                     };
                 },
             }
-            std.debug.warn("ARRGH {}: {}\n", .{ i, arg });
+            warn("ARRGH {}: {}\n", .{ i, arg });
         }
         todo.sort(global_listing.items);
     }
@@ -144,7 +144,7 @@ pub fn main() anyerror!void {
     if (!config.enter_graphical_mode)
         return;
 
-    std.debug.warn("All your codebase are belong to us.\nHome={}\nlistfile={}\n", .{ cStrToSlice(homedir), cStrToSlice(config.listfile) });
+    warn("All your codebase are belong to us.\nHome={}\nlistfile={}\n", .{ cStrToSlice(homedir), cStrToSlice(config.listfile) });
 
     _ = initscr(); // start up ncurses
     defer _ = endwin();
@@ -154,12 +154,22 @@ pub fn main() anyerror!void {
     _ = clear(); // make sure screen is cleared because some implementations don't do it automatically
     _ = curs_set(0); // set cursor invisible
     _ = start_color();
-    _ = init_pair(1, COLOR_WHITE, COLOR_BLACK);
-    _ = init_pair(2, COLOR_BLACK, COLOR_RED);
-    _ = init_pair(3, COLOR_BLUE, COLOR_WHITE);
-    _ = init_pair(4, COLOR_CYAN, COLOR_BLACK);
-    _ = init_pair(5, COLOR_GREEN, COLOR_BLACK);
-    _ = init_pair(6, COLOR_RED, COLOR_BLACK);
+
+    if (true) {
+        _ = init_pair(1, COLOR_WHITE + 8, COLOR_BLACK);
+        _ = init_pair(2, COLOR_BLACK, COLOR_MAGENTA + 8);
+        _ = init_pair(3, COLOR_BLUE, COLOR_WHITE + 8);
+        _ = init_pair(4, COLOR_YELLOW + 8, COLOR_BLACK);
+        _ = init_pair(5, COLOR_GREEN + 8, COLOR_BLACK);
+        _ = init_pair(6, COLOR_BLACK, COLOR_RED);
+    } else {
+        _ = init_pair(1, COLOR_BLACK, COLOR_WHITE);
+        _ = init_pair(2, COLOR_RED, COLOR_BLACK);
+        _ = init_pair(3, COLOR_WHITE, COLOR_BLUE);
+        _ = init_pair(4, COLOR_BLACK, COLOR_YELLOW + 8);
+        _ = init_pair(5, COLOR_BLACK, COLOR_GREEN);
+        _ = init_pair(6, COLOR_BLACK, COLOR_RED);
+    }
 
     _ = intrflush(stdscr, false);
     _ = keypad(stdscr, true); // get special keys
@@ -195,6 +205,7 @@ pub fn main() anyerror!void {
             selection_index += 1;
             if (selection_index >= list_count)
                 selection_index = list_count - 1;
+
             if (selection_index - scrolling >= window_height - draw.dateline_count - 1)
                 scrolling += 1;
         }
@@ -233,11 +244,11 @@ pub fn main() anyerror!void {
             }
         }
         if (ch == 'd') {
-            var item = global_listing.items[selection_index];
+            var item = &global_listing.items[selection_index];
             item.state = .Discarded;
         }
         if (ch == '!') {
-            var item = global_listing.items[selection_index];
+            var item = &global_listing.items[selection_index];
             item.state = .Priority;
             var tp: timespec = undefined;
             _ = clock_gettime(CLOCK_REALTIME, &tp);

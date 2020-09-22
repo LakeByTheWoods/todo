@@ -7,10 +7,10 @@ pub var dateline_count: i32 = 0;
 
 fn drawPointer(window: *WINDOW, enable_unicode: bool, selection_index: usize, list_index: usize, draw_x: *i32, draw_y: i32) void {
     if (selection_index == list_index)
-        _ = mvwaddnwstr(window, draw_y, draw_x.*, misc.u8ToWideString(if (enable_unicode) "   \u{F7C6}  " else "  --> "), 6)
+        _ = mvwaddnwstr(window, draw_y, draw_x.*, misc.u8ToWideString(if (enable_unicode) "  \u{f061}    " else " -->   "), 7) // NB: Extra 3 to cover DAY in archived entries
     else
         _ = mvwaddnwstr(window, draw_y, draw_x.*, misc.u8ToWideString("    "), 4);
-    draw_x.* += 6;
+    draw_x.* += 4;
 }
 
 fn drawNotStarted(window: *WINDOW, enable_unicode: bool, draw_x: *i32, draw_y: i32) void {
@@ -22,34 +22,35 @@ fn drawNotStarted(window: *WINDOW, enable_unicode: bool, draw_x: *i32, draw_y: i
 
 fn drawPriority(window: *WINDOW, enable_unicode: bool, draw_x: *i32, draw_y: i32) void {
     _ = wattron(window, COLOR_PAIR(2));
-    _ = mvwaddnwstr(window, draw_y, draw_x.*, misc.u8ToWideString(if (enable_unicode) "  \u{FAD5}  " else " !!! "), 5);
+    _ = mvwaddnwstr(window, draw_y, draw_x.*, misc.u8ToWideString(if (enable_unicode) "\u{f96d} \u{e20e}  " else " !!! "), 5);
     _ = wattroff(window, COLOR_PAIR(2));
     draw_x.* += 5;
 }
 
 fn drawDoing(window: *WINDOW, enable_unicode: bool, draw_x: *i32, draw_y: i32) void {
     _ = wattron(window, COLOR_PAIR(4));
-    _ = mvwaddnwstr(window, draw_y, draw_x.*, misc.u8ToWideString(if (enable_unicode) "  \u{F90B}  " else " -@- "), 5);
+    _ = mvwaddnwstr(window, draw_y, draw_x.*, misc.u8ToWideString(if (enable_unicode) "  \u{f1ba}  " else " -@- "), 5);
     _ = wattroff(window, COLOR_PAIR(4));
     draw_x.* += 5;
 }
 
 fn drawDone(window: *WINDOW, enable_unicode: bool, draw_x: *i32, draw_y: i32) void {
     _ = wattron(window, COLOR_PAIR(5));
-    _ = mvwaddnwstr(window, draw_y, draw_x.*, misc.u8ToWideString(if (enable_unicode) "  \u{F633}  " else " $$$ "), 5);
+    _ = mvwaddnwstr(window, draw_y, draw_x.*, misc.u8ToWideString(if (enable_unicode) "  \u{f00c}  " else " $$$ "), 5);
     _ = wattroff(window, COLOR_PAIR(5));
     draw_x.* += 5;
 }
+
 fn drawInReview(window: *WINDOW, enable_unicode: bool, draw_x: *i32, draw_y: i32) void {
     _ = wattron(window, COLOR_PAIR(3));
-    _ = mvwaddnwstr(window, draw_y, draw_x.*, misc.u8ToWideString(if (enable_unicode) "  \u{E215}  " else " >>> "), 5);
+    _ = mvwaddnwstr(window, draw_y, draw_x.*, misc.u8ToWideString(if (enable_unicode) "  \u{f1d8}  " else " >>> "), 5);
     _ = wattroff(window, COLOR_PAIR(3));
     draw_x.* += 5;
 }
 
 fn drawDiscarded(window: *WINDOW, enable_unicode: bool, draw_x: *i32, draw_y: i32) void {
     _ = wattron(window, COLOR_PAIR(6));
-    _ = mvwaddnwstr(window, draw_y, draw_x.*, misc.u8ToWideString(if (enable_unicode) "  \u{FB81}  " else " XXX "), 5);
+    _ = mvwaddnwstr(window, draw_y, draw_x.*, misc.u8ToWideString(if (enable_unicode) "  \u{F014}  " else " XXX "), 5);
     _ = wattroff(window, COLOR_PAIR(6));
 
     draw_x.* += 5;
@@ -130,6 +131,7 @@ pub fn drawTodoListViewToWindow(window: *WINDOW, enable_unicode: bool, todoList:
     var printed_header = false;
     var prev_state = todo.State.Not_Started;
 
+    dateline_count = 0;
     for (todoList.items) |entry| {
         if (draw_y >= window_height) break;
         if (list_index >= scrolling and
@@ -155,21 +157,25 @@ pub fn drawTodoListViewToWindow(window: *WINDOW, enable_unicode: bool, todoList:
                 printed_header = true;
                 dateline_count += 1;
 
-                var date_string_length = wcsftime(&scratch_buffer[0], scratch_buffer.len, misc.u8ToWideString(" %Y %B %e"), &week_tracker_tm);
-                _ = mvwaddnwstr(window, draw_y, draw_x, &scratch_buffer[0], @intCast(c_int, date_string_length));
-                draw_x += @intCast(c_int, date_string_length);
+                if (entry.state != .Discarded) {
+                    var date_string_length = wcsftime(&scratch_buffer[0], scratch_buffer.len, misc.u8ToWideString(" %Y %B %e"), &week_tracker_tm);
+                    _ = mvwaddnwstr(window, draw_y, draw_x, &scratch_buffer[0], @intCast(c_int, date_string_length));
+                    draw_x += @intCast(c_int, date_string_length);
 
-                drawNumberSuffix(window, enable_unicode, week_tracker_tm.tm_mday, &draw_x, draw_y);
+                    drawNumberSuffix(window, enable_unicode, week_tracker_tm.tm_mday, &draw_x, draw_y);
 
-                const time_at_end_of_week = time_at_start_of_week + 60 * 60 * 24 * 7;
-                var temp_tm: tm = undefined;
-                _ = localtime_r(&time_at_end_of_week, &temp_tm);
+                    const time_at_end_of_week = time_at_start_of_week + 60 * 60 * 24 * 7;
+                    var temp_tm: tm = undefined;
+                    _ = localtime_r(&time_at_end_of_week, &temp_tm);
 
-                date_string_length = wcsftime(&scratch_buffer[0], scratch_buffer.len, misc.u8ToWideString(" .. %B %e"), &temp_tm);
-                _ = mvwaddnwstr(window, draw_y, draw_x, &scratch_buffer[0], @intCast(c_int, date_string_length));
-                draw_x += @intCast(c_int, date_string_length);
+                    date_string_length = wcsftime(&scratch_buffer[0], scratch_buffer.len, misc.u8ToWideString(" .. %B %e"), &temp_tm);
+                    _ = mvwaddnwstr(window, draw_y, draw_x, &scratch_buffer[0], @intCast(c_int, date_string_length));
+                    draw_x += @intCast(c_int, date_string_length);
 
-                drawNumberSuffix(window, enable_unicode, temp_tm.tm_mday, &draw_x, draw_y);
+                    drawNumberSuffix(window, enable_unicode, temp_tm.tm_mday, &draw_x, draw_y);
+                } else {
+                    _ = mvwaddnwstr(window, draw_y, draw_x, misc.u8ToWideString(" - ARCHIVED - "), " - ARCHIVED - ".len);
+                }
 
                 draw_y += 1;
                 draw_x = 0;
@@ -184,10 +190,13 @@ pub fn drawTodoListViewToWindow(window: *WINDOW, enable_unicode: bool, todoList:
             // Clear whole line
             _ = mvwaddnwstr(window, draw_y, 0, space, max_x);
 
+            _ = wattron(window, COLOR_PAIR(1));
             drawPointer(window, enable_unicode, selection_index, list_index, &draw_x, draw_y);
 
             const day_string_length = wcsftime(&scratch_buffer[0], scratch_buffer.len, misc.u8ToWideString("%a"), &tm_);
-            _ = mvwaddnwstr(window, draw_y, draw_x, &scratch_buffer[0], @intCast(c_int, day_string_length));
+            if (entry.state != .Discarded)
+                _ = mvwaddnwstr(window, draw_y, draw_x, &scratch_buffer[0], @intCast(c_int, day_string_length));
+            _ = wattroff(window, COLOR_PAIR(1));
             draw_x += @intCast(c_int, day_string_length);
 
             switch (entry.state) {
