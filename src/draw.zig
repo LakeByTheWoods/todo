@@ -55,6 +55,7 @@ fn drawDiscarded(window: *WINDOW, enable_unicode: bool, draw_x: *i32, draw_y: i3
 
     draw_x.* += 5;
 }
+
 pub fn drawNumberSuffix(window: *WINDOW, enable_unicode: bool, number: i32, draw_x: *i32, draw_y: i32) void {
     var to_draw: *wchar_t = undefined;
 
@@ -158,7 +159,7 @@ pub fn drawTodoListViewToWindow(window: *WINDOW, enable_unicode: bool, todoList:
                 dateline_count += 1;
 
                 if (entry.state != .Discarded) {
-                    var date_string_length = wcsftime(&scratch_buffer[0], scratch_buffer.len, misc.u8ToWideString(" %Y %B %e"), &week_tracker_tm);
+                    var date_string_length = wcsftime(&scratch_buffer[0], scratch_buffer.len, misc.u8ToWideString(" %Y Week #%U - %B %e"), &week_tracker_tm);
                     _ = mvwaddnwstr(window, draw_y, draw_x, &scratch_buffer[0], @intCast(c_int, date_string_length));
                     draw_x += @intCast(c_int, date_string_length);
 
