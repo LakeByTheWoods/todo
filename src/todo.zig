@@ -16,7 +16,7 @@ fn log(comptime arg: []const u8) void {
 pub fn loadList(allocator: *Allocator, file_path: [*c]const u8) !List {
     var result = List.init(allocator);
 
-    std.debug.warn("Loading Todo List: '{}'\n", .{file_path[0..strlen(&file_path[0])]});
+    //std.debug.warn("Loading Todo List: '{}'\n", .{file_path[0..strlen(&file_path[0])]});
     // FIXME: Use zig std io
     var fd = open(file_path, O_RDONLY);
     defer _ = close(fd);

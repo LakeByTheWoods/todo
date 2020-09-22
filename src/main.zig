@@ -101,7 +101,6 @@ pub fn main() anyerror!void {
     var global_listing = try todo.loadList(allocator, config.listfile);
     defer global_listing.deinit();
     const count = global_listing.items.len;
-    warn("COUNT = {}\n", .{count});
 
     const args = try std.process.argsAlloc(std.heap.page_allocator);
     defer std.process.argsFree(std.heap.page_allocator, args);
@@ -129,9 +128,9 @@ pub fn main() anyerror!void {
                         .state = todo.State.Not_Started,
                         .text = text,
                     };
+                    config.enter_graphical_mode = false;
                 },
             }
-            warn("ARRGH {}: {}\n", .{ i, arg });
         }
         todo.sort(global_listing.items);
     }
@@ -143,8 +142,6 @@ pub fn main() anyerror!void {
 
     if (!config.enter_graphical_mode)
         return;
-
-    warn("All your codebase are belong to us.\nHome={}\nlistfile={}\n", .{ cStrToSlice(homedir), cStrToSlice(config.listfile) });
 
     _ = initscr(); // start up ncurses
     defer _ = endwin();
