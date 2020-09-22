@@ -100,7 +100,12 @@ fn get_week_number(t: *tm) i32 {
     return week_count;
 }
 
-pub fn drawTodoListViewToWindow(window: *WINDOW, enable_unicode: bool, todoList: todo.TodoList, selection_index: usize, scrolling: usize, window_height: i32) void {
+pub fn drawTodoListViewToWindow(window: *WINDOW, enable_unicode: bool, todoList: todo.TodoList, selection_index: usize, scrolling: usize) void {
+    var window_width: c_int = undefined;
+    var window_height: c_int = undefined;
+    curses_getmaxyx(stdscr, &window_height, &window_width);
+    _ = werase(stdscr);
+    defer _ = wrefresh(stdscr);
     var draw_x: c_int = 0;
     var draw_y: c_int = 1;
     var list_index: usize = 0;

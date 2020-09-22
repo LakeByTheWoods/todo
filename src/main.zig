@@ -173,8 +173,11 @@ pub fn main() anyerror!void {
     var selection_index: usize = 0;
     var scrolling: usize = 0;
     var ch: wint_t = undefined;
-    _ = get_wch(&ch);
 
+    // Draw the list at least once
+    draw.drawTodoListViewToWindow(stdscr, config.enable_unicode, global_listing, selection_index, scrolling);
+
+    _ = get_wch(&ch);
     while (ch != 'q') : (_ = get_wch(&ch)) {
         curses_getmaxyx(stdscr, &window_height, &window_width);
         if (ch == KEY_UP) {
@@ -240,8 +243,6 @@ pub fn main() anyerror!void {
             _ = clock_gettime(CLOCK_REALTIME, &tp);
             item.time_started = tp.tv_sec;
         }
-        _ = werase(stdscr);
-        draw.drawTodoListViewToWindow(stdscr, config.enable_unicode, global_listing, selection_index, scrolling, window_height);
-        _ = wrefresh(stdscr);
+        draw.drawTodoListViewToWindow(stdscr, config.enable_unicode, global_listing, selection_index, scrolling);
     }
 }
