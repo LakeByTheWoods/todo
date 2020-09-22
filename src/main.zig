@@ -21,7 +21,7 @@ fn getHomeDir() [*c]u8 {
 }
 
 const Config = struct {
-    enable_unicode: bool = true,
+    enable_unicode: bool = false,
     enter_graphical_mode: bool = true,
     listfile: [*c]u8 = null,
 };

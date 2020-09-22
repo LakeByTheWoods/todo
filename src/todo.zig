@@ -5,7 +5,7 @@ usingnamespace @import("c.zig");
 
 const warn = std.debug.warn;
 
-pub const TodoList = std.ArrayList(TodoEntry);
+pub const List = std.ArrayList(Entry);
 pub const Allocator = std.mem.Allocator;
 
 fn log(comptime arg: []const u8) void {
@@ -13,8 +13,8 @@ fn log(comptime arg: []const u8) void {
 }
 
 /// Cleanup: Must call deinit on result
-pub fn loadList(allocator: *Allocator, file_path: [*c]const u8) !TodoList {
-    var result = TodoList.init(allocator);
+pub fn loadList(allocator: *Allocator, file_path: [*c]const u8) !List {
+    var result = List.init(allocator);
 
     std.debug.warn("Loading Todo List: '{}'\n", .{file_path[0..strlen(&file_path[0])]});
     // FIXME: Use zig std io
@@ -66,7 +66,7 @@ pub fn loadList(allocator: *Allocator, file_path: [*c]const u8) !TodoList {
     return result;
 }
 
-fn compare(conext: void, first: TodoEntry, secnd: TodoEntry) bool {
+fn compare(conext: void, first: Entry, secnd: Entry) bool {
     if (first.state == secnd.state) {
         // identical states, compare times
         switch (first.state) {
@@ -111,8 +111,8 @@ fn compare(conext: void, first: TodoEntry, secnd: TodoEntry) bool {
     return true;
 }
 
-pub fn sort(items: []TodoEntry) void {
-    std.sort.sort(TodoEntry, items, {}, compare);
+pub fn sort(items: []Entry) void {
+    std.sort.sort(Entry, items, {}, compare);
 }
 
 pub const State = enum(c_longlong) {
@@ -124,7 +124,7 @@ pub const State = enum(c_longlong) {
     Discarded = 5,
 };
 
-pub const TodoEntry = struct {
+pub const Entry = struct {
     time_added: time_t,
     time_started: time_t,
     time_complete: time_t,
@@ -132,7 +132,7 @@ pub const TodoEntry = struct {
     text: *wchar_t,
 };
 
-pub fn save(list: TodoList, file_path: []u8) void {
+pub fn save(list: List, file_path: []u8) void {
     const file = fopen(&file_path[0], "w");
     defer _ = fclose(file);
 
